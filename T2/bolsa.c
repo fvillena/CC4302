@@ -9,53 +9,68 @@
 int current_price = 0;
 char *current_seller;
 char *current_buyer;
-int available_buyer = 0;
+int processing_transaction = 0;
+int sellers = 0;
 pthread_cond_t c = PTHREAD_COND_INITIALIZER;
 pthread_mutex_t m = PTHREAD_MUTEX_INITIALIZER;
 
 int vendo(int precio, char *vendedor, char *comprador)
 {
   pthread_mutex_lock(&m);
-  if (precio >= current_price && (current_price != 0))
+  while (processing_transaction)
   {
-    # if 0
+    pthread_cond_wait(&c, &m);
+  }
+  if (precio >= current_price && current_price != 0)
+  {
+#if 0
       printf("El precio es mayor al mejor precio\n");
-    #endif
+#endif
     pthread_mutex_unlock(&m);
     return 0;
   }
   else
   {
-    #if 1
-      printf("El mejor vendedor es %s y vende a %d\n", vendedor, precio);
-    #endif
+
+#if 1
+    printf("BEST: %s = %d\n", vendedor, precio);
+#endif
     current_price = precio;
     current_seller = vendedor;
     pthread_cond_broadcast(&c);
-    while (precio <= current_price && !available_buyer)
+    sellers++;
+    while (precio <= current_price && !processing_transaction)
     {
       pthread_cond_wait(&c, &m);
     }
-    if (available_buyer)
+    if (precio > current_price)
     {
-      #if 1
-        printf("%s vende a %d\n", vendedor, precio);
-      #endif
-      strcpy(comprador, current_buyer);
-      available_buyer = 0;
-      current_buyer = NULL;
-      current_price = 0;
-      current_seller = NULL;
+#if 1
+      printf("REJECTED: %s -> %s = %d\n", vendedor, current_seller, current_price);
+#endif
+      sellers--;
+#if 0
+    if (sellers > 1)
+    {
+      printf("-> SELLERS = %d\n", sellers);
+    }
+#endif
       pthread_mutex_unlock(&m);
-      return 1;
+      return 0;
     }
     else
     {
-      #if 1
-        printf("%s muere porque ahora %s vende a %d\n", vendedor, current_seller, current_price);
-      #endif
+#if 1
+      printf("SELL: %s -> %s = %d\n", vendedor, current_buyer, precio);
+#endif
+      strcpy(comprador, current_buyer);
+      processing_transaction = 0;
+      current_buyer = NULL;
+      current_price = 0;
+      current_seller = NULL;
+      pthread_cond_broadcast(&c);
       pthread_mutex_unlock(&m);
-      return 0;
+      return 1;
     }
   }
 }
@@ -63,28 +78,29 @@ int vendo(int precio, char *vendedor, char *comprador)
 int compro(char *comprador, char *vendedor)
 {
   pthread_mutex_lock(&m);
+  while (processing_transaction)
+  {
+    pthread_cond_wait(&c, &m);
+  }
   if (current_price == 0)
   {
     pthread_mutex_unlock(&m);
-    #if 1
-      printf("Nadie vende\n");
-    #endif
+#if 0
+    printf("Nadie vende\n");
+#endif
     return 0;
   }
-  // else if (available_buyer == 1)
-  // {
-  //   return 0;
-  // }
   else
   {
-    available_buyer = 1;
+    processing_transaction = 1;
     current_buyer = comprador;
     strcpy(vendedor, current_seller);
+    int buying_price = current_price;
     pthread_cond_broadcast(&c);
     pthread_mutex_unlock(&m);
-    #if 1
-      printf("Yo, %s le compro a %s a %d\n", comprador, vendedor, current_price);
-    #endif
-    return current_price;
+#if 1
+    printf("BUY: %s -> %s = %d\n", comprador, vendedor, buying_price);
+#endif
+    return buying_price;
   }
 }
