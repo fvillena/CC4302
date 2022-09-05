@@ -9,98 +9,90 @@
 int current_price = 0;
 char *current_seller;
 char *current_buyer;
+int *state;
 int processing_transaction = 0;
-int sellers = 0;
 pthread_cond_t c = PTHREAD_COND_INITIALIZER;
 pthread_mutex_t m = PTHREAD_MUTEX_INITIALIZER;
 
 int vendo(int precio, char *vendedor, char *comprador)
 {
-  pthread_mutex_lock(&m);
-  while (processing_transaction)
-  {
-    pthread_cond_wait(&c, &m);
-  }
-  if (precio >= current_price && current_price != 0)
-  {
+    pthread_mutex_lock(&m);
+    int local_state = 0;
+    state = &local_state;
+    if (precio < current_price || current_price == 0)
+    {
 #if 0
-      printf("El precio es mayor al mejor precio\n");
+        printf("BEST: %s = %d (state %d)\n", vendedor, precio, local_state);
 #endif
-    pthread_mutex_unlock(&m);
-    return 0;
-  }
-  else
-  {
-
-#if 1
-    printf("BEST: %s = %d\n", vendedor, precio);
-#endif
-    current_price = precio;
-    current_seller = vendedor;
-    pthread_cond_broadcast(&c);
-    sellers++;
-    while (precio <= current_price && !processing_transaction)
-    {
-      pthread_cond_wait(&c, &m);
-    }
-    if (precio > current_price)
-    {
-#if 1
-      printf("REJECTED: %s -> %s = %d\n", vendedor, current_seller, current_price);
-#endif
-      sellers--;
+        *state = -1;
+        local_state = 0;
+        current_price = precio;
+        current_seller = vendedor;
+        pthread_cond_broadcast(&c);
+        while (local_state == 0)
+        {
+            pthread_cond_wait(&c, &m);
+        }
+        if (local_state == -1)
+        {
 #if 0
-    if (sellers > 1)
-    {
-      printf("-> SELLERS = %d\n", sellers);
-    }
+            printf("REJECTED: %s -> %s = %d (state %d)\n", vendedor, current_seller, current_price, local_state);
 #endif
-      pthread_mutex_unlock(&m);
-      return 0;
+            pthread_mutex_unlock(&m);
+            return 0;
+        }
+        else
+        {
+#if 1
+            printf("SELL: %s -> %s = %d (state %d)\n", vendedor, current_buyer, precio, local_state);
+#endif
+            strcpy(comprador, current_buyer);
+            current_buyer = NULL;
+            current_price = 0;
+            current_seller = NULL;
+            processing_transaction = 0;
+            pthread_cond_broadcast(&c);
+            pthread_mutex_unlock(&m);
+            return 1;
+        }
     }
     else
     {
-#if 1
-      printf("SELL: %s -> %s = %d\n", vendedor, current_buyer, precio);
+#if 0
+        printf("WRONG: %s -> %d > %d\n", vendedor, precio, current_price);
 #endif
-      strcpy(comprador, current_buyer);
-      processing_transaction = 0;
-      current_buyer = NULL;
-      current_price = 0;
-      current_seller = NULL;
-      pthread_cond_broadcast(&c);
-      pthread_mutex_unlock(&m);
-      return 1;
+        pthread_mutex_unlock(&m);
+        return 0;
     }
-  }
 }
 
 int compro(char *comprador, char *vendedor)
 {
-  pthread_mutex_lock(&m);
-  while (processing_transaction)
-  {
-    pthread_cond_wait(&c, &m);
-  }
-  if (current_price == 0)
-  {
-    pthread_mutex_unlock(&m);
+    pthread_mutex_lock(&m);
+    while (processing_transaction)
+    {
+        pthread_cond_wait(&c, &m);
+    }
+    if (current_price == 0)
+    {
 #if 0
-    printf("Nadie vende\n");
+        printf("WRONG: %s -> Nadie vende\n", comprador);
 #endif
-    return 0;
-  }
-  else
-  {
-    processing_transaction = 1;
-    current_buyer = comprador;
-    strcpy(vendedor, current_seller);
-    int buying_price = current_price;
-    pthread_cond_broadcast(&c);
-    pthread_mutex_unlock(&m);
-#if 1
-    printf("BUY: %s -> %s = %d\n", comprador, vendedor, buying_price);
+        pthread_mutex_unlock(&m);
+        return 0;
+    }
+    else
+    {
+        int buying_price = current_price;
+        strcpy(vendedor, current_seller);
+#if 0
+        printf("BUY: %s -> %s = %d (pt %d)\n", comprador, vendedor, buying_price, processing_transaction);
 #endif
-    return buying_price;
-  }
+        processing_transaction = 1;
+        *state = 1;
+        current_buyer = comprador;
+        pthread_cond_broadcast(&c);
+        pthread_mutex_unlock(&m);
+        return buying_price;
+    }
 }
