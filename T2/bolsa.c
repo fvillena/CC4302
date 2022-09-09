@@ -6,10 +6,10 @@
 #include "bolsa.h"
 
 int current_price = 0;
-char *current_seller;
-int *state = NULL;
+char *seller;
 char *buyer;
-int processing_transaction = 0;
+enum State{WAITING, DYING, TRADING};
+enum State *state = NULL;
 pthread_cond_t c = PTHREAD_COND_INITIALIZER;
 pthread_mutex_t m = PTHREAD_MUTEX_INITIALIZER;
 
@@ -20,25 +20,25 @@ int vendo(int precio, char *vendedor, char *comprador)
     {
         if (state != NULL)
         {
-            *state = -1;
+            *state = DYING;
         }
-        int local_state = 0;
+        enum State local_state = WAITING;
 #if 0
         printf("BEST: %s = %d (state %d)\n", vendedor, precio, local_state);
 #endif
         buyer = comprador;
         current_price = precio;
-        current_seller = vendedor;
+        seller = vendedor;
         state = &local_state;
         pthread_cond_broadcast(&c);
         while (local_state == 0)
         {
             pthread_cond_wait(&c, &m);
         }
-        if (local_state == -1)
+        if (local_state == DYING)
         {
 #if 0
-            printf("REJECTED: %s -> %s = %d (state %d)\n", vendedor, current_seller, current_price, local_state);
+            printf("REJECTED: %s -> %s = %d (state %d)\n", vendedor, seller, current_price, local_state);
 #endif
             pthread_mutex_unlock(&m);
             return 0;
@@ -77,15 +77,15 @@ int compro(char *comprador, char *vendedor)
     else
     {
         int buying_price = current_price;
-        strcpy(vendedor, current_seller);
+        strcpy(vendedor, seller);
         strcpy(buyer, comprador);
 #if 0
         printf("BUY: %s -> %s = %d (pt %d)\n", comprador, vendedor, buying_price, processing_transaction);
 #endif
-        *state = 1;
+        *state = TRADING;
         state = NULL;
         current_price = 0;
-        current_seller = NULL;
+        seller = NULL;
         pthread_cond_broadcast(&c);
         pthread_mutex_unlock(&m);
         
