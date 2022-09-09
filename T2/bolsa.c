@@ -5,11 +5,10 @@
 
 #include "bolsa.h"
 
-// Declare aca sus variables globales
 int current_price = 0;
 char *current_seller;
-char *current_buyer;
-int *state;
+int *state = NULL;
+char *buyer;
 int processing_transaction = 0;
 pthread_cond_t c = PTHREAD_COND_INITIALIZER;
 pthread_mutex_t m = PTHREAD_MUTEX_INITIALIZER;
@@ -17,17 +16,20 @@ pthread_mutex_t m = PTHREAD_MUTEX_INITIALIZER;
 int vendo(int precio, char *vendedor, char *comprador)
 {
     pthread_mutex_lock(&m);
-    int local_state = 0;
-    state = &local_state;
     if (precio < current_price || current_price == 0)
     {
+        if (state != NULL)
+        {
+            *state = -1;
+        }
+        int local_state = 0;
 #if 0
         printf("BEST: %s = %d (state %d)\n", vendedor, precio, local_state);
 #endif
-        *state = -1;
-        local_state = 0;
+        buyer = comprador;
         current_price = precio;
         current_seller = vendedor;
+        state = &local_state;
         pthread_cond_broadcast(&c);
         while (local_state == 0)
         {
@@ -43,14 +45,9 @@ int vendo(int precio, char *vendedor, char *comprador)
         }
         else
         {
-#if 1
-            printf("SELL: %s -> %s = %d (state %d)\n", vendedor, current_buyer, precio, local_state);
+#if 0
+            printf("SELL: %s -> %s = %d (state %d)\n", vendedor, comprador, precio, local_state);
 #endif
-            strcpy(comprador, current_buyer);
-            current_buyer = NULL;
-            current_price = 0;
-            current_seller = NULL;
-            processing_transaction = 0;
             pthread_cond_broadcast(&c);
             pthread_mutex_unlock(&m);
             return 1;
@@ -69,10 +66,6 @@ int vendo(int precio, char *vendedor, char *comprador)
 int compro(char *comprador, char *vendedor)
 {
     pthread_mutex_lock(&m);
-    while (processing_transaction)
-    {
-        pthread_cond_wait(&c, &m);
-    }
     if (current_price == 0)
     {
 #if 0
@@ -85,14 +78,17 @@ int compro(char *comprador, char *vendedor)
     {
         int buying_price = current_price;
         strcpy(vendedor, current_seller);
+        strcpy(buyer, comprador);
 #if 0
         printf("BUY: %s -> %s = %d (pt %d)\n", comprador, vendedor, buying_price, processing_transaction);
 #endif
-        processing_transaction = 1;
         *state = 1;
-        current_buyer = comprador;
+        state = NULL;
+        current_price = 0;
+        current_seller = NULL;
         pthread_cond_broadcast(&c);
         pthread_mutex_unlock(&m);
+        
         return buying_price;
     }
 }
