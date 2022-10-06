@@ -11,15 +11,15 @@
 // NCOMP: numero de compradores
 // NVEND: numero de vendedores
 
-// #define N 10000
-// #define NCOMP 100
-// #define NVEND 10
+#define N 10000
+#define NCOMP 100
+#define NVEND 10
 
 // Para probar su tarea por primera vez pruebe con:
 //
-#define N 10
-#define NCOMP 3
-#define NVEND 4
+//#define N 10
+//#define NCOMP 3
+//#define NVEND 4
 //
 // Con estos valores le sera mas facil diagnosticar los errores simples.
 
