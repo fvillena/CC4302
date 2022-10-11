@@ -11,7 +11,7 @@
 // Para la cola de esperade nCompartir prefiera el tipo Queue.
 
 static int readers;
-static Queue *waiting_readers;
+static NthQueue *waiting_readers;
 static nThread sharer;
 
 // nth_compartirInit se invoca al partir nThreads para que Ud. inicialize
@@ -21,7 +21,7 @@ void nth_compartirInit(void) {
   // ...
   readers = 0;
   sharer = NULL;
-  waiting_readers = makeQueue();
+  waiting_readers = nth_makeQueue();
 }
 
 void nCompartir(void *ptr) {
@@ -30,15 +30,12 @@ void nCompartir(void *ptr) {
   nThread thisTh = nSelf();
   thisTh->ptr = ptr;
   sharer = thisTh;
-  int l = queueLength(waiting_readers);
-  if (l > 0) {
-    while (!emptyQueue(waiting_readers)) {
-      nThread th = get(waiting_readers);
-      if (th->status == WAIT_ACCEDER_TIMEOUT) {
-        nth_cancelThread(th);
-      }
-      setReady(th);
+  while (!nth_emptyQueue(waiting_readers)) {
+    nThread th = nth_getFront(waiting_readers);
+    if (th->status == WAIT_ACCEDER_TIMEOUT) {
+      nth_cancelThread(th);
     }
+    setReady(th);
   }
   suspend(WAIT_COMPARTIR);
   schedule();
@@ -50,9 +47,12 @@ static void f(nThread th) {
   // th esta en la cola de espera de nCompartir.  Si esta presente
   // eliminela con nth_delQueue.
   // Ver funciones en nKernel/nthread-impl.h y nKernel/pss.h
-  if (nth_queryThread((NthQueue *)waiting_readers, th)) {
-    nth_delQueue((NthQueue *)waiting_readers, th);
+
+  START_CRITICAL
+  if (nth_queryThread(waiting_readers, th)) {
+    nth_delQueue(waiting_readers, th);
   }
+  END_CRITICAL
 }
 
 void *nAcceder(int max_millis) {
@@ -61,7 +61,7 @@ void *nAcceder(int max_millis) {
   nThread thisTh = nSelf();
   readers++;
   if (sharer == NULL) {
-    put(waiting_readers, thisTh);
+    nth_putBack(waiting_readers, thisTh);
     if (max_millis < 0) {
       suspend(WAIT_ACCEDER);
     } else {
@@ -70,7 +70,13 @@ void *nAcceder(int max_millis) {
     }
     schedule();
   }
-  void *data = sharer->ptr;
+  void *data;
+  if (sharer == NULL) {
+    data = NULL;
+    readers--;
+  } else {
+    data = sharer->ptr;
+  }
   END_CRITICAL
   return data;
 }
