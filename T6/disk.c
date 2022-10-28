@@ -62,19 +62,24 @@ void requestDisk(int track) {
   return;
 }
 
+void move(PriQueue *a, PriQueue *b) {
+  while (!emptyPriQueue(a)) {
+    Request *req = priGet(a);
+    priPut(b, req, req->track);
+  }
+}
+
 void releaseDisk() {
   // ...
   spinLock(&sl);
-  busy = 0;
   if (!emptyPriQueue(meq_last_track)) {
     Request *req = priGet(meq_last_track);
     last_track = req->track;
-    busy = 1;
     spinUnlock(&req->w);
   } else if (!emptyPriQueue(lt_last_track)) {
     Request *req = priGet(lt_last_track);
     last_track = req->track;
-    busy = 1;
+    move(lt_last_track, meq_last_track);
     spinUnlock(&req->w);
   } else {
     busy = 0;
